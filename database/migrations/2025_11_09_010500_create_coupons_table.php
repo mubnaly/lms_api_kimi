@@ -24,7 +24,7 @@ return new class extends Migration
             $table->foreignId('instructor_id')->constrained('users')->onDelete('cascade');
             $table->timestamps();
 
-            $table->index(['code, is_active', 'expires_at']);
+            $table->index(['code', 'is_active', 'expires_at']);
         });
     }
 

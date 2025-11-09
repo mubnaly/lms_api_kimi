@@ -12,6 +12,7 @@ use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Laravel\Sanctum\PersonalAccessToken; // Add this
 
+
 class AuthController extends Controller
 {
     protected $cacheTtl = 300; // 5 minutes

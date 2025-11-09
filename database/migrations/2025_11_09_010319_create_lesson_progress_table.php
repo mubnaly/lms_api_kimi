@@ -21,7 +21,8 @@ return new class extends Migration
             $table->timestamps();
 
             $table->unique(['user_id', 'lesson_id']);
-            $table->index(['enrollment_id, is_completed']);
+            $table->index('enrollment_id');
+            $table->index('is_completed');
         });
     }
 

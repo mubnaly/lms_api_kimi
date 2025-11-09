@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Models\User;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\UpdateLessonProgressRequest;
 use App\Models\{Course, Lesson, LessonProgress, Enrollment};

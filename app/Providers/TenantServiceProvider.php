@@ -13,7 +13,7 @@ use Stancl\Tenancy\Jobs;
 use Stancl\Tenancy\Listeners;
 use Stancl\Tenancy\Middleware;
 
-class TenancyServiceProvider extends ServiceProvider
+class TenantServiceProvider  extends ServiceProvider
 {
     // By default, no namespace is used to support the callable array syntax.
     public static string $controllerNamespace = '';

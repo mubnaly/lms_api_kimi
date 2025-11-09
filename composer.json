@@ -12,11 +12,13 @@
         "laravel/sanctum": "^4.2",
         "laravel/tinker": "^2.9",
         "predis/predis": "^3.2",
-        "spatie/laravel-medialibrary": "^11.17",
+        "spatie/laravel-medialibrary": "*",
         "spatie/laravel-permission": "^6.23",
+        "spatie/laravel-query-builder": "^6.3",
         "stancl/tenancy": "^3.9"
     },
     "require-dev": {
+        "barryvdh/laravel-ide-helper": "^3.6",
         "fakerphp/faker": "^1.23",
         "laravel/pail": "^1.1",
         "laravel/pint": "^1.25",

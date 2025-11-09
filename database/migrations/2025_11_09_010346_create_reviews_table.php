@@ -18,9 +18,7 @@ return new class extends Migration
             $table->text('comment')->nullable();
             $table->boolean('is_approved')->default(false);
             $table->timestamps();
-
-            $table->unique(['user_id, course_id']);
-            $table->index(['course_id, rating', 'is_approved']);
+            $table->unique(['user_id', 'course_id']);
         });
     }
 

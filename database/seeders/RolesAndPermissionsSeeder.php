@@ -12,214 +12,169 @@ class RolesAndPermissionsSeeder extends Seeder
 {
     public function run(): void
     {
-        // Reset cached roles and permissions
+        /* flush spatie cache */
         app()[\Spatie\Permission\PermissionRegistrar::class]->forgetCachedPermissions();
 
-        // ════════════════════════════════════════════════
-        // Create Permissions
-        // ════════════════════════════════════════════════
-
+        /* ---------------- permissions ---------------- */
         $permissions = [
-            // Course Management
-            'view courses',
-            'create courses',
-            'edit courses',
-            'delete courses',
-            'publish courses',
-            'approve courses',
+            /* course */
+            'view courses', 'create courses', 'edit courses', 'delete courses',
+            'publish courses', 'approve courses',
 
-            // Lesson Management
-            'create lessons',
-            'edit lessons',
-            'delete lessons',
+            /* lesson / section */
+            'create lessons',  'edit lessons',  'delete lessons',
+            'create sections', 'edit sections', 'delete sections',
 
-            // Section Management
-            'create sections',
-            'edit sections',
-            'delete sections',
+            /* enrollment */
+            'enroll students', 'view enrollments', 'manage enrollments',
 
-            // Enrollment Management
-            'enroll students',
-            'view enrollments',
-            'manage enrollments',
+            /* reviews */
+            'create reviews', 'edit reviews', 'delete reviews', 'approve reviews',
 
-            // Review Management
-            'create reviews',
-            'edit reviews',
-            'delete reviews',
-            'approve reviews',
+            /* coupons */
+            'create coupons', 'edit coupons', 'delete coupons',
 
-            // Coupon Management
-            'create coupons',
-            'edit coupons',
-            'delete coupons',
+            /* users */
+            'view users', 'create users', 'edit users', 'delete users', 'approve instructors',
 
-            // User Management
-            'view users',
-            'create users',
-            'edit users',
-            'delete users',
-            'approve instructors',
-
-            // Analytics
-            'view analytics',
-            'view own analytics',
-
-            // Category Management
-            'manage categories',
-
-            // System Settings
-            'manage settings',
+            /* misc */
+            'view analytics', 'view own analytics', 'manage categories', 'manage settings',
         ];
 
-        foreach ($permissions as $permission) {
-            Permission::create(['name' => $permission]);
+        foreach ($permissions as $p) {
+            Permission::firstOrCreate(['name' => $p, 'guard_name' => 'web']);
         }
 
-        // ════════════════════════════════════════════════
-        // Create Roles and Assign Permissions
-        // ════════════════════════════════════════════════
+        /* ---------------- roles ---------------- */
+        // Admin
+        $adminRole = Role::firstOrCreate(['name' => 'admin', 'guard_name' => 'web']);
+        if ($adminRole->wasRecentlyCreated) {   // only sync permissions the first time
+            $adminRole->givePermissionTo(Permission::all());
+        }
 
-        // Admin Role - Full Access
-        $adminRole = Role::create(['name' => 'admin']);
-        $adminRole->givePermissionTo(Permission::all());
-
-        // Instructor Role
-        $instructorRole = Role::create(['name' => 'instructor']);
-        $instructorRole->givePermissionTo([
-            'view courses',
-            'create courses',
-            'edit courses',
-            'delete courses',
-            'create lessons',
-            'edit lessons',
-            'delete lessons',
-            'create sections',
-            'edit sections',
-            'delete sections',
-            'view enrollments',
-            'create coupons',
-            'edit coupons',
-            'delete coupons',
-            'view own analytics',
-        ]);
-
-        // Student Role
-        $studentRole = Role::create(['name' => 'student']);
-        $studentRole->givePermissionTo([
-            'view courses',
-            'enroll students',
-            'create reviews',
-            'edit reviews',
-        ]);
-
-        // ════════════════════════════════════════════════
-        // Create Default Users
-        // ════════════════════════════════════════════════
-
-        // Super Admin
+        // Instructor
+        $instructorRole = Role::firstOrCreate(['name' => 'instructor', 'guard_name' => 'web']);
+        if ($instructorRole->wasRecentlyCreated) {
+            $instructorRole->givePermissionTo([
+                'view courses', 'create courses', 'edit courses', 'delete courses',
+                'create lessons', 'edit lessons', 'delete lessons',
+                'create sections', 'edit sections', 'delete sections',
+                'view enrollments',
+                'create coupons', 'edit coupons', 'delete coupons',
+                'view own analytics',
+            ]);
+        }
+        // Student
+        $studentRole = Role::firstOrCreate(['name' => 'student', 'guard_name' => 'web']);
+        if ($studentRole->wasRecentlyCreated) {
+            $studentRole->givePermissionTo([
+                    'view courses', 'enroll students', 'create reviews', 'edit reviews',
+                ]);
+        }
+        /* ---------------- users ---------------- */
+        // Admin
         $admin = User::create([
-            'name' => 'Super Admin',
-            'email' => 'admin@lms.test',
-            'password' => Hash::make('password'),
-            'role' => 'admin',
-            'is_active' => true,
-            'is_verified' => true,
-            'phone' => '+201000000001',
-            'metadata' => [
-                'created_by' => 'system',
-                'bio' => 'System Administrator',
+            'name'              => 'Super Admin',
+            'email'             => 'admin@lms.test',
+            'password'          => Hash::make('password'),
+            'avatar'            => null,
+            'role'              => 'admin',
+            'is_active'         => true,
+            'is_verified'       => true,
+            'metadata'          => [
+                'bio'         => 'System Administrator',
+                'created_by'  => 'system',
             ],
+            'email_verified_at' => now(),
         ]);
         $admin->assignRole('admin');
 
-        // Verified Instructor
+        // Approved Instructor
         $instructor = User::create([
-            'name' => 'Ahmed Hassan',
-            'email' => 'instructor@lms.test',
-            'password' => Hash::make('password'),
-            'role' => 'instructor',
-            'is_active' => true,
-            'is_verified' => true,
-            'phone' => '+201000000002',
-            'metadata' => [
-                'bio' => 'Expert in Web Development with 10 years of experience',
-                'expertise' => ['PHP', 'Laravel', 'JavaScript', 'Vue.js'],
-                'qualifications' => [
-                    'Bachelor of Computer Science',
-                    'Certified Laravel Developer',
-                ],
-                'social_links' => [
+            'name'              => 'Ahmed Hassan',
+            'email'             => 'instructor@lms.test',
+            'password'          => Hash::make('password'),
+            'avatar'            => 'https://ui-avatars.com/api/?name=Ahmed+Hassan&background=10b981&color=fff',
+            'role'              => 'instructor',
+            'is_active'         => true,
+            'is_verified'       => true,
+            'metadata'          => [
+                'bio'            => 'Expert Web-Dev instructor with 10 yrs experience',
+                'expertise'      => ['PHP', 'Laravel', 'JavaScript', 'Vue.js'],
+                'qualifications' => ['B.Sc Computer Science', 'Certified Laravel Dev'],
+                'social_links'   => [
                     'linkedin' => 'https://linkedin.com/in/ahmed-hassan',
-                    'github' => 'https://github.com/ahmed-hassan',
+                    'github'   => 'https://github.com/ahmed-hassan',
                 ],
                 'application_status' => 'approved',
-                'applied_at' => now()->subDays(30)->toISOString(),
-                'reviewed_at' => now()->subDays(29)->toISOString(),
+                'applied_at'         => now()->subDays(30),
+                'reviewed_at'        => now()->subDays(29),
             ],
+            'email_verified_at' => now(),
         ]);
         $instructor->assignRole('instructor');
 
-        // Pending Instructor (for testing approval flow)
-        $pendingInstructor = User::create([
-            'name' => 'Mohamed Ali',
-            'email' => 'pending@lms.test',
-            'password' => Hash::make('password'),
-            'role' => 'instructor',
-            'is_active' => true,
+        // Pending Instructor
+        $pending = User::create([
+            'name'        => 'Mohamed Ali',
+            'email'       => 'pending@lms.test',
+            'password'    => Hash::make('password'),
+            'avatar'      => 'https://ui-avatars.com/api/?name=Mohamed+Ali&background=f59e0b&color=fff',
+            'role'        => 'instructor',
+            'is_active'   => true,
             'is_verified' => false,
-            'phone' => '+201000000003',
-            'metadata' => [
-                'bio' => 'Passionate about teaching Data Science and Machine Learning',
-                'expertise' => ['Python', 'Data Science', 'Machine Learning'],
-                'qualifications' => [
-                    'Master in Data Science',
-                ],
+            'metadata'    => [
+                'bio'            => 'Passionate Data-Science instructor',
+                'expertise'      => ['Python', 'Data Science', 'Machine Learning'],
+                'qualifications' => ['M.Sc Data Science'],
                 'application_status' => 'pending',
-                'applied_at' => now()->subDays(5)->toISOString(),
+                'applied_at'         => now()->subDays(5),
             ],
         ]);
-        $pendingInstructor->assignRole('instructor');
+        $pending->assignRole('instructor');
 
-        // Student Users
+        // Students
         $student1 = User::create([
-            'name' => 'Sara Ahmed',
-            'email' => 'student@lms.test',
-            'password' => Hash::make('password'),
-            'role' => 'student',
-            'is_active' => true,
+            'name'        => 'Sara Ahmed',
+            'email'       => 'student@lms.test',
+            'password'    => Hash::make('password'),
+            'avatar'      => 'https://ui-avatars.com/api/?name=Sara+Ahmed&background=3b82f6&color=fff',
+            'role'        => 'student',
+            'is_active'   => true,
             'is_verified' => true,
-            'phone' => '+201000000004',
-            'metadata' => [
-                'bio' => 'Computer Science Student',
-                'interests' => ['Web Development', 'Mobile Apps'],
+            'metadata'    => [
+                'bio'        => 'Computer-science student',
+                'interests'  => ['Web Dev', 'Mobile Apps'],
             ],
+            'email_verified_at' => now(),
         ]);
         $student1->assignRole('student');
 
         $student2 = User::create([
-            'name' => 'Omar Ibrahim',
-            'email' => 'student2@lms.test',
-            'password' => Hash::make('password'),
-            'role' => 'student',
-            'is_active' => true,
+            'name'        => 'Omar Ibrahim',
+            'email'       => 'student2@lms.test',
+            'password'    => Hash::make('password'),
+            'avatar'      => 'https://ui-avatars.com/api/?name=Omar+Ibrahim&background=8b5cf6&color=fff',
+            'role'        => 'student',
+            'is_active'   => true,
             'is_verified' => true,
-            'phone' => '+201000000005',
-            'metadata' => [
-                'bio' => 'Aspiring Full Stack Developer',
-            ],
+            'metadata'    => ['bio' => 'Aspiring full-stack developer'],
+            'email_verified_at' => now(),
         ]);
         $student2->assignRole('student');
 
-        $this->command->info('✅ Roles and Permissions seeded successfully!');
-        $this->command->info('');
-        $this->command->info('🔑 Default Users Created:');
-        $this->command->info('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-        $this->command->info('👑 Admin: admin@lms.test / password');
-        $this->command->info('👨‍🏫 Instructor: instructor@lms.test / password');
-        $this->command->info('⏳ Pending Instructor: pending@lms.test / password');
-        $this->command->info('👨‍🎓 Student 1: student@lms.test / password');
-        $this->command->info('👨‍🎓 Student 2: student2@lms.test / password');
-        $this->command->info('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+        /* ---------------- output ---------------- */
+        $this->command->info('✅ Roles & permissions seeded successfully!');
+        $this->command->line('');
+        $this->command->table(
+            ['Role', 'Login', 'Password'],
+            [
+                ['Super Admin', 'admin@lms.test', 'password'],
+                ['Instructor (approved)', 'instructor@lms.test', 'password'],
+                ['Instructor (pending)', 'pending@lms.test', 'password'],
+                ['Student 1', 'student@lms.test', 'password'],
+                ['Student 2', 'student2@lms.test', 'password'],
+            ]
+        );
     }
 }
