@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+{{-- <!DOCTYPE html>
 <html lang="{{ str_replace('_', '-', app()->getLocale()) }}">
     <head>
         <meta charset="utf-8">
@@ -173,4 +173,306 @@
             </div>
         </div>
     </body>
+</html> --}}
+
+
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LMS API Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+</head>
+
+<body class="bg-gray-100">
+    <div class="min-h-screen">
+        <!-- Header -->
+        <header class="bg-blue-600 text-white shadow-lg">
+            <div class="container mx-auto px-4 py-6">
+                <h1 class="text-3xl font-bold">🎓 LMS API Testing Dashboard</h1>
+                <p class="text-blue-200 mt-2">Test your Laravel API endpoints</p>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <div class="container mx-auto px-4 py-8">
+            <!-- Login Section -->
+            <div id="loginSection" class="bg-white rounded-lg shadow-md p-6 mb-8">
+                <h2 class="text-2xl font-bold mb-4">🔐 Login</h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Email</label>
+                        <input type="email" id="loginEmail" value="admin@lms.test"
+                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Password</label>
+                        <input type="password" id="loginPassword" value="password"
+                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                    </div>
+                </div>
+                <button onclick="login()"
+                    class="mt-4 bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition">
+                    Login
+                </button>
+                <div id="loginStatus" class="mt-4"></div>
+            </div>
+
+            <!-- Token Display -->
+            <div id="tokenSection" class="hidden bg-green-50 rounded-lg shadow-md p-6 mb-8">
+                <h3 class="text-lg font-bold text-green-800 mb-2">✅ Authenticated</h3>
+                <p class="text-sm text-gray-600 mb-2">Token:</p>
+                <code id="tokenDisplay"
+                    class="block bg-gray-800 text-green-400 p-3 rounded text-xs overflow-x-auto"></code>
+                <button onclick="logout()"
+                    class="mt-4 bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700 transition text-sm">
+                    Logout
+                </button>
+            </div>
+
+            <!-- API Endpoints -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <!-- Public Endpoints -->
+                <div class="bg-white rounded-lg shadow-md p-6">
+                    <h3 class="text-xl font-bold mb-4 text-gray-800">📖 Public Endpoints</h3>
+                    <div class="space-y-2">
+                        <button onclick="testEndpoint('GET', '/api/v1/courses')"
+                            class="w-full text-left px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded transition">
+                            GET /courses
+                        </button>
+                        <button onclick="testEndpoint('GET', '/api/v1/categories')"
+                            class="w-full text-left px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded transition">
+                            GET /categories
+                        </button>
+                        <button onclick="testEndpoint('GET', '/api/v1/instructors')"
+                            class="w-full text-left px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded transition">
+                            GET /instructors
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Authenticated Endpoints -->
+                <div class="bg-white rounded-lg shadow-md p-6">
+                    <h3 class="text-xl font-bold mb-4 text-blue-800">🔒 Authenticated Endpoints</h3>
+                    <div class="space-y-2">
+                        <button onclick="testEndpoint('GET', '/api/v1/profile', true)"
+                            class="w-full text-left px-4 py-2 bg-blue-50 hover:bg-blue-100 rounded transition">
+                            GET /profile
+                        </button>
+                        <button onclick="testEndpoint('GET', '/api/v1/my-enrollments', true)"
+                            class="w-full text-left px-4 py-2 bg-blue-50 hover:bg-blue-100 rounded transition">
+                            GET /my-enrollments
+                        </button>
+                        <button onclick="testEndpoint('GET', '/api/v1/wishlist', true)"
+                            class="w-full text-left px-4 py-2 bg-blue-50 hover:bg-blue-100 rounded transition">
+                            GET /wishlist
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Admin Endpoints -->
+                <div class="bg-white rounded-lg shadow-md p-6">
+                    <h3 class="text-xl font-bold mb-4 text-purple-800">👑 Admin Endpoints</h3>
+                    <div class="space-y-2">
+                        <button onclick="testEndpoint('GET', '/api/v1/admin/analytics/overview', true)"
+                            class="w-full text-left px-4 py-2 bg-purple-50 hover:bg-purple-100 rounded transition">
+                            GET /admin/analytics/overview
+                        </button>
+                        <button onclick="testEndpoint('GET', '/api/v1/admin/pending-instructors', true)"
+                            class="w-full text-left px-4 py-2 bg-purple-50 hover:bg-purple-100 rounded transition">
+                            GET /admin/pending-instructors
+                        </button>
+                        <button onclick="testEndpoint('GET', '/api/v1/admin/pending-courses', true)"
+                            class="w-full text-left px-4 py-2 bg-purple-50 hover:bg-purple-100 rounded transition">
+                            GET /admin/pending-courses
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Quick Actions -->
+                <div class="bg-white rounded-lg shadow-md p-6">
+                    <h3 class="text-xl font-bold mb-4 text-green-800">⚡ Quick Actions</h3>
+                    <div class="space-y-2">
+                        <button onclick="testEndpoint('GET', '/health')"
+                            class="w-full text-left px-4 py-2 bg-green-50 hover:bg-green-100 rounded transition">
+                            Health Check
+                        </button>
+                        <button onclick="createTestCourse()"
+                            class="w-full text-left px-4 py-2 bg-green-50 hover:bg-green-100 rounded transition">
+                            Create Test Course
+                        </button>
+                        <button onclick="enrollInCourse()"
+                            class="w-full text-left px-4 py-2 bg-green-50 hover:bg-green-100 rounded transition">
+                            Enroll in Course
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Response Display -->
+            <div class="bg-white rounded-lg shadow-md p-6 mt-8">
+                <h3 class="text-xl font-bold mb-4">📝 Response</h3>
+                <div id="responseStatus" class="mb-4"></div>
+                <pre id="responseBody" class="bg-gray-900 text-green-400 p-4 rounded overflow-x-auto text-sm max-h-96 overflow-y-auto">
+Click an endpoint to test...</pre>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE_URL = 'http://localhost:8000';
+        let authToken = localStorage.getItem('auth_token');
+
+        if (authToken) {
+            showTokenSection();
+        }
+
+        async function login() {
+            const email = document.getElementById('loginEmail').value;
+            const password = document.getElementById('loginPassword').value;
+
+            try {
+                const response = await axios.post(`${API_BASE_URL}/api/v1/login`, {
+                    email,
+                    password
+                });
+
+                authToken = response.data.access_token;
+                localStorage.setItem('auth_token', authToken);
+
+                showTokenSection();
+                showStatus('loginStatus', 'success', 'Login successful! ✅');
+            } catch (error) {
+                showStatus('loginStatus', 'error', 'Login failed: ' + (error.response?.data?.message || error.message));
+            }
+        }
+
+        function logout() {
+            authToken = null;
+            localStorage.removeItem('auth_token');
+            document.getElementById('tokenSection').classList.add('hidden');
+            document.getElementById('loginSection').classList.remove('hidden');
+            showStatus('loginStatus', 'info', 'Logged out');
+        }
+
+        function showTokenSection() {
+            document.getElementById('tokenSection').classList.remove('hidden');
+            document.getElementById('tokenDisplay').textContent = authToken;
+        }
+
+        async function testEndpoint(method, endpoint, requiresAuth = false) {
+            const config = {
+                method,
+                url: `${API_BASE_URL}${endpoint}`,
+            };
+
+            if (requiresAuth && authToken) {
+                config.headers = {
+                    'Authorization': `Bearer ${authToken}`
+                };
+            }
+
+            try {
+                const response = await axios(config);
+                displayResponse(response.status, response.data);
+            } catch (error) {
+                displayResponse(
+                    error.response?.status || 500,
+                    error.response?.data || {
+                        error: error.message
+                    }
+                );
+            }
+        }
+
+        async function createTestCourse() {
+            if (!authToken) {
+                alert('Please login first');
+                return;
+            }
+
+            const courseData = {
+                title: 'Test Course ' + Date.now(),
+                subtitle: 'A test course created from dashboard',
+                description: 'This is a test course description',
+                level: 'beginner',
+                language: 'arabic',
+                price: 99.99,
+                category_id: 1,
+                requirements: ['Basic knowledge'],
+                outcomes: ['Learn testing']
+            };
+
+            try {
+                const response = await axios.post(`${API_BASE_URL}/api/v1/courses`, courseData, {
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`
+                    }
+                });
+                displayResponse(response.status, response.data);
+            } catch (error) {
+                displayResponse(
+                    error.response?.status || 500,
+                    error.response?.data || {
+                        error: error.message
+                    }
+                );
+            }
+        }
+
+        async function enrollInCourse() {
+            if (!authToken) {
+                alert('Please login first');
+                return;
+            }
+
+            const slug = prompt('Enter course slug:', 'complete-laravel-11-mastery');
+            if (!slug) return;
+
+            try {
+                const response = await axios.post(
+                    `${API_BASE_URL}/api/v1/courses/${slug}/enroll`, {}, {
+                        headers: {
+                            'Authorization': `Bearer ${authToken}`
+                        }
+                    }
+                );
+                displayResponse(response.status, response.data);
+            } catch (error) {
+                displayResponse(
+                    error.response?.status || 500,
+                    error.response?.data || {
+                        error: error.message
+                    }
+                );
+            }
+        }
+
+        function displayResponse(status, data) {
+            const statusDiv = document.getElementById('responseStatus');
+            const bodyPre = document.getElementById('responseBody');
+
+            const statusColor = status >= 200 && status < 300 ? 'green' : 'red';
+            statusDiv.innerHTML = `<span class="font-bold text-${statusColor}-600">Status: ${status}</span>`;
+            bodyPre.textContent = JSON.stringify(data, null, 2);
+        }
+
+        function showStatus(elementId, type, message) {
+            const colors = {
+                success: 'green',
+                error: 'red',
+                info: 'blue'
+            };
+
+            const element = document.getElementById(elementId);
+            element.innerHTML = `<div class="bg-${colors[type]}-100 border-l-4 border-${colors[type]}-500 text-${colors[type]}-700 p-4 rounded">
+                ${message}
+            </div>`;
+        }
+    </script>
+</body>
+
 </html>

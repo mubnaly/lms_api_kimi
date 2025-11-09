@@ -4,14 +4,15 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Spatie\MediaLibrary\{HasMedia, InteractsWithMedia};
+use Illuminate\Support\Str;
 
 class Lesson extends Model implements HasMedia
 {
     use InteractsWithMedia;
 
     protected $fillable = [
-        'course_id', 'section_id', 'title', 'description', 'type',
-        'content', 'video_url', 'duration', 'video_platform', 'video_id',
+        'course_id', 'section_id', 'title', 'slug', 'description', 'type',
+        'content', 'video_url', 'video_platform', 'video_id', 'duration',
         'is_preview', 'is_free', 'order', 'is_visible', 'metadata'
     ];
 
@@ -20,7 +21,21 @@ class Lesson extends Model implements HasMedia
         'is_free' => 'boolean',
         'is_visible' => 'boolean',
         'metadata' => 'array',
+        'duration' => 'integer',
     ];
+
+    protected static function boot()
+    {
+        parent::boot();
+
+        static::creating(function ($lesson) {
+            if (empty($lesson->slug)) {
+                $lesson->slug = Str::slug($lesson->title);
+            }
+        });
+    }
+
+    // ────────────── Relationships ──────────────
 
     public function course()
     {
@@ -29,7 +44,7 @@ class Lesson extends Model implements HasMedia
 
     public function section()
     {
-        return $this->belongsTo(CourseSection::class);
+        return $this->belongsTo(CourseSection::class, 'section_id');
     }
 
     public function progress()
@@ -37,8 +52,41 @@ class Lesson extends Model implements HasMedia
         return $this->hasMany(LessonProgress::class);
     }
 
-    public function getVideoEmbedUrlAttribute()
+    // ────────────── Scopes ──────────────
+
+    public function scopeVisible($query)
     {
+        return $query->where('is_visible', true);
+    }
+
+    public function scopePreview($query)
+    {
+        return $query->where('is_preview', true);
+    }
+
+    public function scopeFree($query)
+    {
+        return $query->where('is_free', true);
+    }
+
+    public function scopeOrdered($query)
+    {
+        return $query->orderBy('order');
+    }
+
+    public function scopeByType($query, string $type)
+    {
+        return $query->where('type', $type);
+    }
+
+    // ────────────── Attributes ──────────────
+
+    public function getVideoEmbedUrlAttribute(): ?string
+    {
+        if (!$this->video_platform || !$this->video_id) {
+            return $this->video_url;
+        }
+
         return match($this->video_platform) {
             'youtube' => "https://www.youtube.com/embed/{$this->video_id}",
             'vimeo' => "https://player.vimeo.com/video/{$this->video_id}",
@@ -46,12 +94,88 @@ class Lesson extends Model implements HasMedia
             default => $this->video_url,
         };
     }
-    public function lessons()
+
+    public function getFormattedDurationAttribute(): string
     {
-        return $this->hasMany(Lesson::class)->orderBy('order');
+        $hours = floor($this->duration / 3600);
+        $minutes = floor(($this->duration % 3600) / 60);
+        $seconds = $this->duration % 60;
+
+        if ($hours > 0) {
+            return sprintf('%02d:%02d:%02d', $hours, $minutes, $seconds);
+        }
+
+        return sprintf('%02d:%02d', $minutes, $seconds);
     }
-    public function scopePreview($query)
+
+    public function getIsVideoAttribute(): bool
     {
-        return $query->where('is_preview', true);
+        return $this->type === 'video';
+    }
+
+    public function getIsDocumentAttribute(): bool
+    {
+        return $this->type === 'document';
+    }
+
+    public function getDocumentUrlAttribute(): ?string
+    {
+        return $this->getFirstMediaUrl('documents');
+    }
+
+    // ────────────── Methods ──────────────
+
+    public function getNextLesson(): ?self
+    {
+        return $this->section->lessons()
+            ->where('order', '>', $this->order)
+            ->visible()
+            ->ordered()
+            ->first();
+    }
+
+    public function getPreviousLesson(): ?self
+    {
+        return $this->section->lessons()
+            ->where('order', '<', $this->order)
+            ->visible()
+            ->orderByDesc('order')
+            ->first();
+    }
+
+    public function isAccessibleBy(?User $user): bool
+    {
+        if (!$user) {
+            return $this->is_preview;
+        }
+
+        // Instructor can access own course lessons
+        if ($user->id === $this->course->instructor_id) {
+            return true;
+        }
+
+        // Preview lessons are public
+        if ($this->is_preview) {
+            return true;
+        }
+
+        // Check enrollment
+        return $user->hasCourse($this->course);
+    }
+
+    // ────────────── Media Collections ──────────────
+
+    public function registerMediaCollections(): void
+    {
+        $this->addMediaCollection('documents')
+            ->singleFile()
+            ->acceptsMimeTypes([
+                'application/pdf',
+                'application/msword',
+                'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                'application/vnd.ms-powerpoint',
+                'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+            ])
+            ->maxFileSize(10 * 1024 * 1024); // 10MB
     }
 }

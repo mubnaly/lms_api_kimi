@@ -1,4 +1,3 @@
-// database/migrations/2024_01_01_000005_create_enrollments_table.php
 <?php
 
 use Illuminate\Database\Migrations\Migration;
@@ -24,7 +23,7 @@ return new class extends Migration
             $table->json('metadata')->nullable();
             $table->timestamps();
 
-            $table->unique(['user_id, course_id']);
+            $table->unique(['user_id', 'course_id']);
             $table->index(['payment_status', 'enrolled_at']);
         });
     }

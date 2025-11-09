@@ -7,15 +7,15 @@ use Illuminate\Foundation\Auth\User as Authenticatable;
 use Spatie\Permission\Traits\HasRoles;
 use Spatie\MediaLibrary\{HasMedia, InteractsWithMedia};
 use Laravel\Cashier\Billable;
-use Illuminate\Support\Str;
+use Illuminate\Notifications\Notifiable;
 
 class User extends Authenticatable implements HasMedia
 {
-    use HasApiTokens, HasRoles, InteractsWithMedia, Billable;
+    use HasApiTokens, HasRoles, InteractsWithMedia, Billable, Notifiable;
 
     protected $fillable = [
-        'name', 'email', 'password', 'avatar', 'role',
-        'is_active', 'is_verified', 'metadata', 'phone'
+        'name', 'email', 'password', 'avatar', 'role', 'phone',
+        'is_active', 'is_verified', 'metadata'
     ];
 
     protected $hidden = ['password', 'remember_token'];
@@ -27,6 +27,8 @@ class User extends Authenticatable implements HasMedia
         'is_verified' => 'boolean',
         'metadata' => 'array',
     ];
+
+    // ────────────── Relationships ──────────────
 
     public function courses()
     {
@@ -45,12 +47,52 @@ class User extends Authenticatable implements HasMedia
 
     public function wishlistCourses()
     {
-        return $this->belongsToMany(Course::class, 'wishlist');
+        return $this->belongsToMany(Course::class, 'wishlist')
+            ->withTimestamps();
     }
+
+    public function lessonProgress()
+    {
+        return $this->hasMany(LessonProgress::class);
+    }
+
+    // ────────────── Scopes ──────────────
+
+    public function scopeInstructors($query)
+    {
+        return $query->where('role', 'instructor');
+    }
+
+    public function scopeStudents($query)
+    {
+        return $query->where('role', 'student');
+    }
+
+    public function scopeActive($query)
+    {
+        return $query->where('is_active', true);
+    }
+
+    public function scopeVerified($query)
+    {
+        return $query->where('is_verified', true);
+    }
+
+    public function scopePendingApproval($query)
+    {
+        return $query->where('role', 'instructor')
+            ->where('is_verified', false)
+            ->whereJsonContains('metadata->application_status', 'pending');
+    }
+
+    // ────────────── Methods ──────────────
 
     public function hasCourse(Course $course): bool
     {
-        return $this->enrollments()->where('course_id', $course->id)->exists();
+        return $this->enrollments()
+            ->where('course_id', $course->id)
+            ->where('payment_status', 'completed')
+            ->exists();
     }
 
     public function hasCompletedLesson(Lesson $lesson): bool
@@ -60,14 +102,31 @@ class User extends Authenticatable implements HasMedia
             ->where('is_completed', true)
             ->exists();
     }
-    public function lessonProgress()
+
+    public function canAccessLesson(Lesson $lesson): bool
     {
-        return $this->hasMany(LessonProgress::class);
+        // Instructor can access own course lessons
+        if ($this->id === $lesson->course->instructor_id) {
+            return true;
+        }
+
+        // Preview lessons are public
+        if ($lesson->is_preview) {
+            return true;
+        }
+
+        // Check enrollment
+        return $this->hasCourse($lesson->course);
     }
+
+    // ────────────── Attributes ──────────────
 
     public function getTotalStudentsAttribute(): int
     {
-        return Enrollment::whereIn('course_id', $this->courses()->pluck('id'))->count();
+        return Enrollment::whereIn('course_id', $this->courses()->pluck('id'))
+            ->where('payment_status', 'completed')
+            ->distinct('user_id')
+            ->count('user_id');
     }
 
     public function getTotalRevenueAttribute(): float
@@ -77,30 +136,33 @@ class User extends Authenticatable implements HasMedia
             ->sum('paid_amount');
     }
 
-    public function registerMediaCollections(): void
-    {
-        $this->addMediaCollection('avatar')
-            ->singleFile()
-            ->acceptsMimeTypes(['image/jpeg', 'image/png', 'image/webp']);
-    }
-
     public function getAvatarUrlAttribute(): ?string
     {
         return $this->getFirstMediaUrl('avatar') ?? $this->avatar;
     }
 
-    public function scopeInstructors($query)
+    public function getIsInstructorAttribute(): bool
     {
-        return $query->where('role', 'instructor');
+        return $this->role === 'instructor';
     }
 
-    public function scopeStudents($query)
+    public function getIsStudentAttribute(): bool
     {
-        return $query->where('role', 'student')->orWhereNull('role');
+        return $this->role === 'student';
     }
 
-    public function scopeActive($query)
+    public function getIsAdminAttribute(): bool
     {
-        return $query->where('is_active', true);
+        return $this->role === 'admin';
+    }
+
+    // ────────────── Media Collections ──────────────
+
+    public function registerMediaCollections(): void
+    {
+        $this->addMediaCollection('avatar')
+            ->singleFile()
+            ->acceptsMimeTypes(['image/jpeg', 'image/png', 'image/webp', 'image/jpg'])
+            ->maxFileSize(2 * 1024 * 1024); // 2MB
     }
 }
