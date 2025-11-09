@@ -14,7 +14,15 @@ return new class extends Migration
         Schema::create('activity_logs', function (Blueprint $table) {
             $table->id();
             $table->foreignId('user_id')->constrained()->cascadeOnDelete();
-            $table->foreignId('tenant_id')->nullable()->constrained()->cascadeOnDelete();
+
+            // SAME as tenants.id  ->  bigint unsigned
+            $table->unsignedBigInteger('tenant_id')->nullable();
+            $table->index('tenant_id');
+            $table->foreign('tenant_id')
+                ->references('id')
+                ->on('tenants')
+                ->cascadeOnDelete();
+
             $table->string('method', 10);
             $table->string('path');
             $table->ipAddress('ip');
@@ -23,7 +31,6 @@ return new class extends Migration
             $table->timestamps();
 
             $table->index(['user_id', 'created_at']);
-            $table->index('tenant_id');
         });
     }
 
