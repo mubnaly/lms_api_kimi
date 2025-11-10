@@ -15,8 +15,8 @@ return new class extends Migration
             $table->id();
             $table->foreignId('user_id')->constrained()->cascadeOnDelete();
 
-            // SAME as tenants.id  ->  bigint unsigned
-            $table->unsignedBigInteger('tenant_id')->nullable();
+            // MATCH tenants.id type -> string instead of unsignedBigInteger
+            $table->string('tenant_id')->nullable();
             $table->index('tenant_id');
             $table->foreign('tenant_id')
                 ->references('id')
