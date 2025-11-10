@@ -10,12 +10,15 @@ return [
     /**
      * Central domains - requests to these domains will NOT be treated as tenant requests
      */
-    'central_domains' => [
-        '127.0.0.1',
-        'localhost',
-        env('APP_DOMAIN', 'lms.test'),
-        env('CENTRAL_DOMAIN', 'central.lms.test'),
-    ],
+    'tenant_database' => env('TENANT_DB_PREFIX', 'tenant_'),
+    'central_domains' => [env('CENTRAL_DOMAIN', 'localhost')],
+
+    // 'central_domains' => [
+    //     '127.0.0.1',
+    //     'localhost',
+    //     env('APP_DOMAIN', 'lms.test'),
+    //     env('CENTRAL_DOMAIN', 'central.lms.test'),
+    // ],
 
     /**
      * Bootstrap tenancy features

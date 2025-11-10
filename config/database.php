@@ -84,6 +84,21 @@ return [
             // ],
         // ],
 
+
+        'landlord' => [
+            'driver' => env('DB_CONNECTION_LANDLORD', 'mysql'),
+            'host' => env('DB_HOST_LANDLORD', '127.0.0.1'),
+            'port' => env('DB_PORT_LANDLORD', '3306'),
+            'database' => env('DB_DATABASE_LANDLORD', 'lms_db'),
+            'username' => env('DB_USERNAME_LANDLORD', 'root'),
+            'password' => env('DB_PASSWORD_LANDLORD', ''),
+            'charset' => 'utf8mb4',
+            'collation' => 'utf8mb4_unicode_ci',
+            'prefix' => '',
+            'strict' => true,
+            'engine' => null,
+        ],
+
         'mariadb' => [
             'driver' => 'mariadb',
             'url' => env('DB_URL'),
@@ -135,13 +150,17 @@ return [
         ],
 
         'tenant' => [
-            'driver' => 'mysql',
-            'host' => env('DB_HOST_TENANT', '127.0.0.1'),
-            'port' => env('DB_PORT_TENANT', '3306'),
-            'database' => null, // Will be set dynamically
-            'username' => env('DB_USERNAME_TENANT', 'root'),
-            'password' => env('DB_PASSWORD_TENANT', ''),
-            // ... other config
+            'driver' => env('DB_CONNECTION', 'mysql'),
+            'host' => env('DB_HOST', '127.0.0.1'),
+            'port' => env('DB_PORT', '3306'),
+            'database' => null, // Dynamic per tenant
+            'username' => env('DB_USERNAME', 'root'),
+            'password' => env('DB_PASSWORD', ''),
+            'charset' => 'utf8mb4',
+            'collation' => 'utf8mb4_unicode_ci',
+            'prefix' => '',
+            'strict' => true,
+            'engine' => null,
         ],
     ],
 
