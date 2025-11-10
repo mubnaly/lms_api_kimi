@@ -82,7 +82,7 @@ class CertificateService
     /**
      * Generate unique certificate ID
      */
-    protected function generateCertificateId(Enrollment $enrollment): string
+    public function generateCertificateId(Enrollment $enrollment): string
     {
         return strtoupper(sprintf(
             'CERT-%s-%s-%s',

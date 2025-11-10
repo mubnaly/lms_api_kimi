@@ -1,7 +1,8 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
-use App\Models\{Course,};
+use Illuminate\Http\Request;
+use App\Models\{Course, Enrollment, User, Category};
 use App\Http\Controllers\Api\{
     AuthController,
     CourseController,
@@ -38,7 +39,7 @@ Route::get('/health', function () {
         'environment' => app()->environment(),
         'tenant' => tenant()?->name ?? 'central',
     ]);
-})->name('health');
+})->name('api.health');
 
 // API Documentation
 Route::get('/docs', function () {
@@ -70,8 +71,8 @@ Route::prefix('v1')->middleware(['throttle:60,1'])->group(function () {
     });
 
     // Backward compatibility (without /auth prefix)
-    Route::post('/register', [AuthController::class, 'register']);
-    Route::post('/login', [AuthController::class, 'login']);
+    Route::post('/register', [AuthController::class, 'register'])->name('register');
+    Route::post('/login', [AuthController::class, 'login'])->name('login');
     Route::post('/forgot-password', [AuthController::class, 'forgotPassword']);
     Route::post('/reset-password', [AuthController::class, 'resetPassword']);
 
@@ -113,6 +114,83 @@ Route::prefix('v1')->middleware(['throttle:60,1'])->group(function () {
     Route::prefix('payments')->name('payment.')->group(function () {
         Route::post('/{gateway}/callback', [PaymentCallbackController::class, 'handleCallback'])->name('callback');
         Route::get('/{gateway}/return', [PaymentCallbackController::class, 'returnUrl'])->name('return');
+    });
+
+    // ═══════════════ Public Certificate Verification ═══════════════
+    Route::post('/certificates/verify', [CertificateController::class, 'verify'])->name('certificates.verify');
+
+    // ═══════════════ Search & Filter ═══════════════
+    Route::prefix('search')->name('search.')->group(function () {
+        // Global search
+        Route::get('/', function (Request $request) {
+            $query = $request->input('q');
+
+            if (!$query || strlen($query) < 2) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Search query must be at least 2 characters',
+                ], 400);
+            }
+
+            $courses = Course::published()
+                ->where(function ($q) use ($query) {
+                    $q->where('title', 'like', "%{$query}%")
+                      ->orWhere('subtitle', 'like', "%{$query}%")
+                      ->orWhere('description', 'like', "%{$query}%");
+                })
+                ->limit(10)
+                ->get();
+
+            $instructors = User::instructors()
+                ->verified()
+                ->where('name', 'like', "%{$query}%")
+                ->limit(5)
+                ->get();
+
+            $categories = Category::active()
+                ->where('name', 'like', "%{$query}%")
+                ->limit(5)
+                ->get();
+
+            return response()->json([
+                'success' => true,
+                'data' => [
+                    'courses' => \App\Http\Resources\CourseResource::collection($courses),
+                    'instructors' => \App\Http\Resources\UserResource::collection($instructors),
+                    'categories' => \App\Http\Resources\CategoryResource::collection($categories),
+                ],
+            ]);
+        })->name('global');
+
+        // Advanced filter
+        Route::post('/filter', function (Request $request) {
+            $query = Course::published();
+
+            if ($request->filled('categories')) {
+                $query->whereIn('category_id', $request->categories);
+            }
+
+            if ($request->filled('levels')) {
+                $query->whereIn('level', $request->levels);
+            }
+
+            if ($request->filled('price_range')) {
+                [$min, $max] = $request->price_range;
+                $query->whereBetween('price', [$min, $max]);
+            }
+
+            if ($request->filled('rating')) {
+                $query->where('rating', '>=', $request->rating);
+            }
+
+            if ($request->filled('duration')) {
+                $query->where('duration', '<=', $request->duration * 3600);
+            }
+
+            $courses = $query->paginate($request->get('per_page', 15));
+
+            return \App\Http\Resources\CourseResource::collection($courses);
+        })->name('filter');
     });
 });
 
@@ -171,6 +249,68 @@ Route::prefix('v1')->middleware(['auth:sanctum', 'throttle:120,1'])->group(funct
     // Backward compatibility
     Route::post('/courses/{course:slug}/wishlist', [WishlistController::class, 'toggle']);
 
+    // ═══════════════ Certificates ═══════════════
+    Route::prefix('certificates')->name('certificates.')->group(function () {
+        Route::get('/', [CertificateController::class, 'index'])->name('index');
+        Route::get('/{enrollment}', [CertificateController::class, 'show'])->name('show');
+        Route::get('/{enrollment}/download', [CertificateController::class, 'download'])->name('download');
+    });
+
+    // ═══════════════ Analytics ═══════════════
+    Route::prefix('analytics')->name('analytics.')->group(function () {
+        // Student analytics
+        Route::get('/student/dashboard', function (Request $request) {
+            $user = $request->user();
+
+            return response()->json([
+                'success' => true,
+                'data' => [
+                    'total_courses' => $user->enrollments()->completed()->count(),
+                    'completed_courses' => $user->enrollments()->finished()->count(),
+                    'in_progress' => $user->enrollments()->active()->count(),
+                    'total_certificates' => $user->enrollments()->finished()->count(),
+                    'total_time_spent' => $user->lessonProgress()->sum('watched_seconds'),
+                    'recent_activity' => $user->lessonProgress()
+                        ->with('lesson.course')
+                        ->latest('last_watched_at')
+                        ->limit(5)
+                        ->get(),
+                ],
+            ]);
+        })->name('student.dashboard');
+
+        // Instructor analytics
+        Route::get('/instructor/dashboard', function (Request $request) {
+            $instructor = $request->user();
+
+            if (!$instructor->hasRole('instructor')) {
+                abort(403);
+            }
+
+            $courses = $instructor->courses()->published();
+
+            return response()->json([
+                'success' => true,
+                'data' => [
+                    'total_courses' => $courses->count(),
+                    'total_students' => $instructor->total_students,
+                    'total_revenue' => $instructor->total_revenue,
+                    'average_rating' => $courses->avg('rating'),
+                    'total_reviews' => $courses->sum('reviews_count'),
+                    'monthly_revenue' => Enrollment::whereIn('course_id', $courses->pluck('id'))
+                        ->completed()
+                        ->whereMonth('enrolled_at', now()->month)
+                        ->sum('paid_amount'),
+                    'recent_enrollments' => Enrollment::whereIn('course_id', $courses->pluck('id'))
+                        ->with(['user', 'course'])
+                        ->latest()
+                        ->limit(10)
+                        ->get(),
+                ],
+            ]);
+        })->name('instructor.dashboard');
+    });
+
     // ═══════════════ Become Instructor ═══════════════
     Route::post('/become-instructor', [InstructorController::class, 'becomeInstructor'])->name('instructor.apply');
 });
@@ -223,6 +363,29 @@ Route::prefix('v1')->middleware(['auth:sanctum', 'role:instructor|admin', 'throt
     // Backward compatibility
     Route::get('/courses/{course:slug}/coupons', [CouponController::class, 'index']);
     Route::post('/courses/{course:slug}/coupons', [CouponController::class, 'store']);
+
+    // ═══════════════ Instructor Onboarding ═══════════════
+    Route::prefix('instructor')->name('instructor.')->group(function () {
+        // Get onboarding progress
+        Route::get('/onboarding', function (Request $request) {
+            $service = app(\App\Services\InstructorOnboardingService::class);
+            return response()->json([
+                'success' => true,
+                'data' => $service->getOnboardingProgress($request->user()),
+            ]);
+        })->name('onboarding.progress');
+
+        // Update onboarding step
+        Route::post('/onboarding/{step}', function (Request $request, string $step) {
+            $service = app(\App\Services\InstructorOnboardingService::class);
+            $service->updateOnboardingProgress($request->user(), $step);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Onboarding step completed',
+            ]);
+        })->name('onboarding.update');
+    });
 });
 
 /*
@@ -258,7 +421,7 @@ Route::prefix('v1/admin')->middleware(['auth:sanctum', 'role:admin', 'throttle:1
     // ═══════════════ User Management ═══════════════
     Route::prefix('users')->name('users.')->group(function () {
         Route::get('/', function (Request $request) {
-            $users = \App\Models\User::query()
+            $users = User::query()
                 ->when($request->role, fn($q, $role) => $q->where('role', $role))
                 ->when($request->search, fn($q, $search) =>
                     $q->where('name', 'like', "%{$search}%")
@@ -268,6 +431,57 @@ Route::prefix('v1/admin')->middleware(['auth:sanctum', 'role:admin', 'throttle:1
 
             return \App\Http\Resources\UserResource::collection($users);
         })->name('index');
+    });
+
+    // ═══════════════ Bulk Operations ═══════════════
+    Route::prefix('bulk')->name('bulk.')->group(function () {
+        // Bulk publish courses
+        Route::post('/courses/publish', function (Request $request) {
+            $request->validate([
+                'course_ids' => 'required|array',
+                'course_ids.*' => 'exists:courses,id',
+            ]);
+
+            $updated = Course::whereIn('id', $request->course_ids)
+                ->update([
+                    'is_published' => true,
+                    'status' => 'pending',
+                ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => "{$updated} courses published successfully",
+            ]);
+        })->name('courses.publish');
+
+        // Bulk delete courses
+        Route::delete('/courses', function (Request $request) {
+            $request->validate([
+                'course_ids' => 'required|array',
+                'course_ids.*' => 'exists:courses,id',
+            ]);
+
+            $query = Course::whereIn('id', $request->course_ids);
+
+            // Check for enrollments
+            $coursesWithEnrollments = $query->whereHas('enrollments', function ($q) {
+                $q->where('payment_status', 'completed');
+            })->count();
+
+            if ($coursesWithEnrollments > 0) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Cannot delete courses with active enrollments',
+                ], 400);
+            }
+
+            $deleted = $query->delete();
+
+            return response()->json([
+                'success' => true,
+                'message' => "{$deleted} courses deleted successfully",
+            ]);
+        })->name('courses.delete');
     });
 });
 
@@ -283,260 +497,4 @@ Route::fallback(function () {
         'available_versions' => ['v1'],
         'documentation' => config('app.url') . '/api/docs',
     ], 404);
-});
-
-    /*
-|--------------------------------------------------------------------------
-| Certificate Routes
-|--------------------------------------------------------------------------
-*/
-Route::prefix('v1/certificates')->middleware(['auth:sanctum', 'throttle:30,1'])->name('certificates.')->group(function () {
-
-    // Get all user certificates
-    Route::get('/', [CertificateController::class, 'index'])->name('index');
-
-    // Get specific certificate
-    Route::get('/{enrollment}', [CertificateController::class, 'show'])->name('show');
-
-    // Download certificate PDF
-    Route::get('/{enrollment}/download', [CertificateController::class, 'download'])->name('download');
-});
-
-// Public certificate verification (no auth required)
-Route::post('/v1/certificates/verify', [CertificateController::class, 'verify'])
-    ->middleware('throttle:10,1')
-    ->name('certificates.verify');
-
-/*
-|--------------------------------------------------------------------------
-| Instructor Onboarding Routes
-|--------------------------------------------------------------------------
-*/
-Route::prefix('v1/instructor')->middleware(['auth:sanctum', 'role:instructor|admin', 'throttle:60,1'])->name('instructor.')->group(function () {
-
-    // Get onboarding progress
-    Route::get('/onboarding', function (Request $request) {
-        $service = app(\App\Services\InstructorOnboardingService::class);
-        return response()->json([
-            'success' => true,
-            'data' => $service->getOnboardingProgress($request->user()),
-        ]);
-    })->name('onboarding.progress');
-
-    // Update onboarding step
-    Route::post('/onboarding/{step}', function (Request $request, string $step) {
-        $service = app(\App\Services\InstructorOnboardingService::class);
-        $service->updateOnboardingProgress($request->user(), $step);
-
-        return response()->json([
-            'success' => true,
-            'message' => 'Onboarding step completed',
-        ]);
-    })->name('onboarding.update');
-});
-
-/*
-|--------------------------------------------------------------------------
-| Enhanced Analytics Routes
-|--------------------------------------------------------------------------
-*/
-Route::prefix('v1/analytics')->middleware(['auth:sanctum', 'throttle:60,1'])->name('analytics.')->group(function () {
-
-    // Student analytics
-    Route::get('/student/dashboard', function (Request $request) {
-        $user = $request->user();
-
-        return response()->json([
-            'success' => true,
-            'data' => [
-                'total_courses' => $user->enrollments()->completed()->count(),
-                'completed_courses' => $user->enrollments()->finished()->count(),
-                'in_progress' => $user->enrollments()->active()->count(),
-                'total_certificates' => $user->enrollments()->finished()->count(),
-                'total_time_spent' => $user->lessonProgress()->sum('watched_seconds'),
-                'recent_activity' => $user->lessonProgress()
-                    ->with('lesson.course')
-                    ->latest('last_watched_at')
-                    ->limit(5)
-                    ->get(),
-            ],
-        ]);
-    })->name('student.dashboard');
-
-    // Instructor analytics
-    Route::get('/instructor/dashboard', function (Request $request) {
-        $instructor = $request->user();
-
-        if (!$instructor->hasRole('instructor')) {
-            abort(403);
-        }
-
-        $courses = $instructor->courses()->published();
-
-        return response()->json([
-            'success' => true,
-            'data' => [
-                'total_courses' => $courses->count(),
-                'total_students' => $instructor->total_students,
-                'total_revenue' => $instructor->total_revenue,
-                'average_rating' => $courses->avg('rating'),
-                'total_reviews' => $courses->sum('reviews_count'),
-                'monthly_revenue' => \App\Models\Enrollment::whereIn('course_id', $courses->pluck('id'))
-                    ->completed()
-                    ->whereMonth('enrolled_at', now()->month)
-                    ->sum('paid_amount'),
-                'recent_enrollments' => \App\Models\Enrollment::whereIn('course_id', $courses->pluck('id'))
-                    ->with(['user', 'course'])
-                    ->latest()
-                    ->limit(10)
-                    ->get(),
-            ],
-        ]);
-    })->name('instructor.dashboard');
-});
-
-/*
-|--------------------------------------------------------------------------
-| Bulk Operations Routes
-|--------------------------------------------------------------------------
-*/
-Route::prefix('v1/bulk')->middleware(['auth:sanctum', 'role:instructor|admin', 'throttle:30,1'])->name('bulk.')->group(function () {
-
-    // Bulk publish courses
-    Route::post('/courses/publish', function (Request $request) {
-        $request->validate([
-            'course_ids' => 'required|array',
-            'course_ids.*' => 'exists:courses,id',
-        ]);
-
-        $user = $request->user();
-        $query = \App\Models\Course::whereIn('id', $request->course_ids);
-
-        if (!$user->hasRole('admin')) {
-            $query->where('instructor_id', $user->id);
-        }
-
-        $updated = $query->update([
-            'is_published' => true,
-            'status' => 'pending',
-        ]);
-
-        return response()->json([
-            'success' => true,
-            'message' => "{$updated} courses published successfully",
-        ]);
-    })->name('courses.publish');
-
-    // Bulk delete courses
-    Route::delete('/courses', function (Request $request) {
-        $request->validate([
-            'course_ids' => 'required|array',
-            'course_ids.*' => 'exists:courses,id',
-        ]);
-
-        $user = $request->user();
-        $query = \App\Models\Course::whereIn('id', $request->course_ids);
-
-        if (!$user->hasRole('admin')) {
-            $query->where('instructor_id', $user->id);
-        }
-
-        // Check for enrollments
-        $coursesWithEnrollments = $query->whereHas('enrollments', function ($q) {
-            $q->where('payment_status', 'completed');
-        })->count();
-
-        if ($coursesWithEnrollments > 0) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Cannot delete courses with active enrollments',
-            ], 400);
-        }
-
-        $deleted = $query->delete();
-
-        return response()->json([
-            'success' => true,
-            'message' => "{$deleted} courses deleted successfully",
-        ]);
-    })->name('courses.delete');
-});
-
-/*
-|--------------------------------------------------------------------------
-| Search & Filter Routes
-|--------------------------------------------------------------------------
-*/
-Route::prefix('v1/search')->middleware(['throttle:60,1'])->name('search.')->group(function () {
-
-    // Global search
-    Route::get('/', function (Request $request) {
-        $query = $request->input('q');
-
-        if (!$query || strlen($query) < 2) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Search query must be at least 2 characters',
-            ], 400);
-        }
-
-        $courses = \App\Models\Course::published()
-            ->where(function ($q) use ($query) {
-                $q->where('title', 'like', "%{$query}%")
-                  ->orWhere('subtitle', 'like', "%{$query}%")
-                  ->orWhere('description', 'like', "%{$query}%");
-            })
-            ->limit(10)
-            ->get();
-
-        $instructors = \App\Models\User::instructors()
-            ->verified()
-            ->where('name', 'like', "%{$query}%")
-            ->limit(5)
-            ->get();
-
-        $categories = \App\Models\Category::active()
-            ->where('name', 'like', "%{$query}%")
-            ->limit(5)
-            ->get();
-
-        return response()->json([
-            'success' => true,
-            'data' => [
-                'courses' => \App\Http\Resources\CourseResource::collection($courses),
-                'instructors' => \App\Http\Resources\UserResource::collection($instructors),
-                'categories' => \App\Http\Resources\CategoryResource::collection($categories),
-            ],
-        ]);
-    })->name('global');
-
-    // Advanced filter
-    Route::post('/filter', function (Request $request) {
-        $query = \App\Models\Course::published();
-
-        if ($request->filled('categories')) {
-            $query->whereIn('category_id', $request->categories);
-        }
-
-        if ($request->filled('levels')) {
-            $query->whereIn('level', $request->levels);
-        }
-
-        if ($request->filled('price_range')) {
-            [$min, $max] = $request->price_range;
-            $query->whereBetween('price', [$min, $max]);
-        }
-
-        if ($request->filled('rating')) {
-            $query->where('rating', '>=', $request->rating);
-        }
-
-        if ($request->filled('duration')) {
-            $query->where('duration', '<=', $request->duration * 3600);
-        }
-
-        $courses = $query->paginate($request->get('per_page', 15));
-
-        return \App\Http\Resources\CourseResource::collection($courses);
-    })->name('filter');
 });

@@ -5,43 +5,74 @@ namespace App\Observers;
 use App\Models\Course;
 use App\Events\{CourseCreated, CoursePublished, CourseUpdated, CourseDeleted};
 use Illuminate\Support\Facades\{Cache, Log};
+use Illuminate\Support\Facades\Auth;
 
 class CourseObserver
 {
     /**
      * Handle the Course "creating" event.
      */
+    // public function creating(Course $course): void
+    // {
+    //     // Generate slug if not provided
+    //     if (empty($course->slug)) {
+    //         $course->slug = \Illuminate\Support\Str::slug($course->title);
+
+    //         // Ensure unique slug
+    //         $originalSlug = $course->slug;
+    //         $count = 1;
+    //         while (Course::where('slug', $course->slug)->exists()) {
+    //             $course->slug = $originalSlug . '-' . $count;
+    //             $count++;
+    //         }
+    //     }
+
+    //     // Set default status
+    //     if (empty($course->status)) {
+    //         $course->status = 'draft';
+    //     }
+
+    //     // Set instructor_id if not set
+    //     if (!$course->instructor_id && auth()->check()) {
+    //         $course->instructor_id = auth()->id();
+    //     }
+
+    //     Log::info('Creating course', [
+    //         'title' => $course->title,
+    //         'instructor_id' => $course->instructor_id,
+    //     ]);
+    // }
+
     public function creating(Course $course): void
-    {
-        // Generate slug if not provided
-        if (empty($course->slug)) {
-            $course->slug = \Illuminate\Support\Str::slug($course->title);
+{
+    // Generate slug if not provided
+    if (empty($course->slug)) {
+        $course->slug = \Illuminate\Support\Str::slug($course->title);
 
-            // Ensure unique slug
-            $originalSlug = $course->slug;
-            $count = 1;
-            while (Course::where('slug', $course->slug)->exists()) {
-                $course->slug = $originalSlug . '-' . $count;
-                $count++;
-            }
+        // Ensure unique slug
+        $originalSlug = $course->slug;
+        $count = 1;
+        while (Course::where('slug', $course->slug)->exists()) {
+            $course->slug = $originalSlug . '-' . $count;
+            $count++;
         }
-
-        // Set default status
-        if (empty($course->status)) {
-            $course->status = 'draft';
-        }
-
-        // Set instructor_id if not set
-        if (!$course->instructor_id && auth()->check()) {
-            $course->instructor_id = auth()->id();
-        }
-
-        Log::info('Creating course', [
-            'title' => $course->title,
-            'instructor_id' => $course->instructor_id,
-        ]);
     }
 
+    // Set default status
+    if (empty($course->status)) {
+        $course->status = 'draft';
+    }
+
+    // Set instructor_id if not set
+    if (! $course->instructor_id && Auth::check()) {
+        $course->instructor_id = Auth::id();
+    }
+
+    Log::info('Creating course', [
+        'title' => $course->title,
+        'instructor_id' => $course->instructor_id,
+    ]);
+}
     /**
      * Handle the Course "created" event.
      */
